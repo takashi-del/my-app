@@ -47,6 +47,7 @@ function deleteFavoriteSite(i){
 let grapeDiarySelectedVariety = null;
 let grapeDiaryEditingId = null;
 let grapeDiaryShowAll = false;
+let grapeDiarySelectToEdit = false;
 let grapeDiaryPhotoData = "";
 
 function grapeDiaryEnsureData(){
@@ -116,6 +117,9 @@ function gdvRender(){
   const mo = monthEl.value || new Date().toISOString().slice(0,7);
   const parts = mo.split("-");
   document.getElementById("gdv-heading").textContent = grapeDiaryShowAll ? "すべての日記" : `${Number(parts[0])}年${Number(parts[1])}月の記録`;
+  const editButton=document.getElementById("gdv-edit-toggle");
+  if(editButton){editButton.textContent=grapeDiarySelectToEdit?"キャンセル":"編集";editButton.setAttribute("aria-pressed",String(grapeDiarySelectToEdit));}
+  document.getElementById("gdv-edit-help").hidden=!grapeDiarySelectToEdit;
   const allButton=document.getElementById("gdv-all-toggle");
   if(allButton){allButton.textContent=grapeDiaryShowAll?"月別表示に戻す":"📚 過去の日記をすべて見る";allButton.setAttribute("aria-pressed",String(grapeDiaryShowAll));}
 
@@ -124,7 +128,7 @@ function gdvRender(){
     .sort((a,b) => String(a.date||"").localeCompare(String(b.date||""))); // 日付順
 
   list.innerHTML = entries.length ? entries.map(e => `
-    <article class="gdv-card">
+    <article class="gdv-card ${grapeDiarySelectToEdit?'gdv-selectable':''}" ${grapeDiarySelectToEdit?`role="button" tabindex="0" aria-label="${escHtml((e.title||'ぶどうの記録')+'を編集')}" data-diary-id="${escHtml(String(e.id))}" onclick="gdvChooseEdit(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();gdvChooseEdit(this)}"`:''}>
       ${e.photo ? `<img src="${e.photo}" alt="">` : `<div class="gdv-card-photo-empty">🍇</div>`}
       <div class="gdv-body">
         <div class="gdv-meta"><span>🍇 ${escHtml(e.variety||"")}</span><span>${escHtml(e.date||"")}</span></div>
@@ -134,10 +138,7 @@ function gdvRender(){
           ${e.size ? `<span class="gdv-tag">粒 ${escHtml(String(e.size))}mm</span>` : ""}
           ${e.color ? `<span class="gdv-tag">色 ${escHtml(e.color)}</span>` : ""}
         </div>
-        <div class="gdv-record-actions">
-          <button type="button" class="gdv-record-edit" data-diary-id="${escHtml(String(e.id))}" onclick="gdvEditFromButton(this)">✏️ 編集する</button>
-          <button type="button" class="gdv-record-delete" data-diary-id="${escHtml(String(e.id))}" onclick="gdvDeleteFromButton(this)">🗑 削除する</button>
-        </div>
+
       </div>
     </article>`).join("") :
     `<div class="gdv-empty">${grapeDiaryShowAll?"この品種の日記はまだありません":"この月の日記はまだありません。過去の記録は「すべて見る」から確認できます"} 🍇</div>`;
@@ -148,24 +149,18 @@ function gdvToggleAll(){
   gdvClose();
   gdvRender();
 }
-function gdvEditFromButton(button){
-  const id=button.getAttribute("data-diary-id");
-  if(id!==null)gdvOpen(id);
-}
-function gdvDeleteFromButton(button){
-  const id=button.getAttribute("data-diary-id");
-  if(id===null)return;
-  grapeDiaryEnsureData();
-  const entry=state.gdvEntries.find(e=>String(e.id)===id);
-  if(!entry)return showToast("日記が見つかりません");
-  if(!confirm(`「${entry.title||"ぶどうの記録"}」を削除しますか？\n削除後は元に戻せません。`))return;
-  const idx=state.gdvEntries.findIndex(e=>String(e.id)===id);
-  if(idx<0)return;
-  state.gdvEntries.splice(idx,1);
-  if(!saveState()){state.gdvEntries.splice(idx,0,entry);return;}
-  if(String(grapeDiaryEditingId)===id)gdvClose();
+function gdvToggleEdit(){
+  grapeDiarySelectToEdit=!grapeDiarySelectToEdit;
+  gdvClose();
   gdvRender();
-  showToast("日記を削除しました");
+}
+function gdvChooseEdit(card){
+  if(!grapeDiarySelectToEdit)return;
+  const id=card.getAttribute("data-diary-id");
+  if(id===null)return;
+  grapeDiarySelectToEdit=false;
+  gdvRender();
+  gdvOpen(id);
 }
 
 function gdvSelect(v){
@@ -881,6 +876,7 @@ button {
 
 /* Diary history / edit / delete controls */
 .gdv-all-toggle{display:block;width:100%;margin:8px 0 15px;padding:12px;border-radius:13px;border:1px solid #d8c9f5;background:#f8f5ff;color:#5b21b6;font-size:13px;font-weight:800;cursor:pointer}
+.gdv-heading-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.gdv-edit-toggle{flex:none;border:1px solid #c9b6f4;background:#f3edff;color:#5b21b6;border-radius:999px;padding:8px 14px;font-weight:800;cursor:pointer}.gdv-edit-help{color:#fff;font-weight:700;text-shadow:0 1px 5px #000;padding:4px 0}.gdv-selectable{cursor:pointer;outline:2px solid #b794f4;outline-offset:2px}.gdv-selectable:focus-visible{outline:3px solid #7c3aed}
 .gdv-record-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:13px}
 .gdv-record-actions button{flex:1;min-width:100px;border-radius:11px;padding:10px 12px;font-size:13px;font-weight:800;cursor:pointer}
 .gdv-record-edit{border:1px solid #c9b6f4;background:#f3edff;color:#5b21b6}
@@ -985,12 +981,14 @@ button {
     <div class="gdv-list-heading">
       <div>
         <div class="gdv-list-small">MONTHLY RECORDS</div>
-        <div class="gdv-heading" id="gdv-heading">今月の日記</div>
+        <div class="gdv-heading-row"><div class="gdv-heading" id="gdv-heading">今月の日記</div><button type="button" id="gdv-edit-toggle" class="gdv-edit-toggle" aria-pressed="false" onclick="gdvToggleEdit()">編集</button></div>
       </div>
       <button type="button" class="gdv-write" onclick="gdvOpen()">＋ 日記を書く</button>
     </div>
 
     <button type="button" id="gdv-all-toggle" class="gdv-all-toggle" onclick="gdvToggleAll()">📚 過去の日記をすべて見る</button>
+
+    <p id="gdv-edit-help" class="gdv-edit-help" hidden>編集する日記を選んでください</p>
 
     <div id="gdv-form" class="gdv-form">
       <div class="gdv-form-top">
@@ -1679,7 +1677,7 @@ async function grapeCommit(payload,meta,backup=true){const db=await grapeDB();re
 function grapeTransform(value,fn){if(typeof value==='string')return fn(value);if(Array.isArray(value))return value.map(v=>grapeTransform(v,fn));if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,grapeTransform(v,fn)]));return value;}
 function grapeSnapshot(){return grapeTransform(state,v=>grapeRefs.get(v)||v);}
 async function grapeCompress(file){grapePhotoBusy++;const source=typeof file==='string'?file:URL.createObjectURL(file);try{const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('写真を読み込めません'));img.src=source;});const ratio=Math.min(1,1280/Math.max(img.naturalWidth,img.naturalHeight));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*ratio));canvas.height=Math.max(1,Math.round(img.naturalHeight*ratio));const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);let out=canvas.toDataURL('image/jpeg',.76);if(out.length>900000)out=canvas.toDataURL('image/jpeg',.55);return out;}finally{grapePhotoBusy--;if(typeof file!=='string')URL.revokeObjectURL(source);}}
-async function grapeBoot(){try{const saved=await grapeRead('state'),meta=await grapeRead('meta');if(saved){state=saved;grapeOwner=meta?.owner||null;grapePending=!!meta?.pending;}else{await grapeCommit(grapeSnapshot(),{owner:null,pending:true});grapePending=true;/* Legacy data is removed only after the new transaction commits. */localStorage.removeItem('grape_app_state');localStorage.removeItem('grape_app_state_backup_auto');}document.getElementById('cloud-sql').value=GRAPE_SQL;let cfg;try{cfg=JSON.parse(localStorage.getItem('grape_cloud_config')||'null')||{url:'https://jzavcrvzlkrrloeyaade.supabase.co',key:'sb_publishable_fxwURoIuZ6Rax_WikvxZYA_zGMJGAdW'};grapeSession=JSON.parse(localStorage.getItem('grape_cloud_session')||'null');}catch(e){}if(cfg){grapeClient=cfg;document.getElementById('cloud-url').value=cfg.url;document.getElementById('cloud-key').value=cfg.key;}if(grapeClient&&grapeSession){try{await grapeRefresh();await grapeConnect();}catch(e){grapeStatus('端末内に保存中・クラウド接続を確認してください');}}if(!grapeReady)await grapeHydrate();}catch(e){grapeStatus('端末への保存に失敗しました。日記をバックアップしてください');showToast('端末保存を開始できませんでした。サイトデータは削除しないでください');}finally{document.getElementById('grape-loading')?.remove();}}
+async function grapeBoot(){try{const saved=await grapeRead('state'),meta=await grapeRead('meta');if(saved){state=saved;grapeOwner=meta?.owner||null;grapePending=!!meta?.pending;}else{await grapeCommit(grapeSnapshot(),{owner:null,pending:true});grapePending=true;/* Legacy data is removed only after the new transaction commits. */localStorage.removeItem('grape_app_state');localStorage.removeItem('grape_app_state_backup_auto');}document.getElementById('cloud-sql').value=GRAPE_SQL;let cfg;try{cfg=JSON.parse(localStorage.getItem('grape_cloud_config')||'null')||{url:'https://nyhgmozicnxvyhffyqbm.supabase.co',key:'sb_publishable_xdlZJ2CGtlbGTkatmxM9jQ_MxTwea1J'};grapeSession=JSON.parse(localStorage.getItem('grape_cloud_session')||'null');}catch(e){}if(cfg){grapeClient=cfg;document.getElementById('cloud-url').value=cfg.url;document.getElementById('cloud-key').value=cfg.key;}if(grapeClient&&grapeSession){try{await grapeRefresh();await grapeConnect();}catch(e){grapeStatus('端末内に保存中・クラウド接続を確認してください');}}if(!grapeReady)await grapeHydrate();}catch(e){grapeStatus('端末への保存に失敗しました。日記をバックアップしてください');showToast('端末保存を開始できませんでした。サイトデータは削除しないでください');}finally{document.getElementById('grape-loading')?.remove();}}
 function grapePersist(){const snap=grapeSnapshot();const task=async()=>{try{await grapeCommit(snap,{owner:grapeOwner,pending:true});grapePending=true;localStorage.removeItem('grape_app_state');localStorage.removeItem('grape_app_state_backup_auto');if(grapeReady){try{await grapeSend(snap);}catch(e){grapeStatus('端末に保存済み・クラウド未同期：'+e.message);}}else grapeStatus('端末内に保存済み・クラウド未接続');return true;}catch(e){grapeStatus('端末保存に失敗しました。バックアップしてください');showToast('保存できませんでした。画面を閉じずにバックアップしてください');return false;}};const result=grapeQueue.then(task,task);grapeQueue=result.catch(()=>{});return result;}
 function grapeApiPath(path){return grapeClient.url+path;}
 async function grapeFetch(path,options={},auth=true){if(!grapeClient)throw Error('初回の接続設定が必要です');if(auth)await grapeRefresh();const headers={apikey:grapeClient.key,...(auth?{Authorization:'Bearer '+grapeSession.access_token}:{}),...options.headers};const res=await fetch(grapeApiPath(path),{signal:AbortSignal.timeout(20000),...options,headers});let data=null;const raw=await res.text();try{data=raw?JSON.parse(raw):null;}catch(e){}if(!res.ok)throw Error(data?.msg||data?.message||data?.error_description||data?.error||('接続エラー '+res.status));return data;}
